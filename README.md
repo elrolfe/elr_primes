@@ -4,7 +4,7 @@ This library provides a structure for iterating through prime numbers
 as well as methods for calculating prime factors and classifying
 numbers as prime or composite.
 
-[API Reference (docs.rs)](https://https://docs.rs/elr_primes/0.1.1)
+[API Reference (docs.rs)](https://docs.rs/elr_primes/0.1.2)
 
 ## Using this library
 
@@ -12,7 +12,7 @@ Add the following to your `Cargo.toml` file
 
 ```toml
 [dependencies]
-elr_primes = "0.1.1"
+elr_primes = "0.1.2"
 ```
 
 ## Examples
