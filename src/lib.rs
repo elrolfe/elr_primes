@@ -71,6 +71,8 @@
 //! };
 //! ```
 use std::slice::Iter;
+use std::sync::mpsc;
+use std::thread;
 
 /// Vector of prime factor tuples.
 ///
@@ -103,7 +105,7 @@ pub enum Primality {
 /// The inclusive upper bound for prime numbers is provided when the structure
 /// is instantiated.
 ///
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Primes {
     primes: Vec<usize>,
     bound: usize,
@@ -114,6 +116,8 @@ impl Primes {
     ///
     /// The maximum bound for prime numbers is passed as a parameter to `new()`. If the bound is
     /// less than 2, then the iterator will provide no primes.
+    /// 
+    /// The method spawns threads to generate blocks of threads concurrently.
     ///
     /// # Example
     ///
@@ -124,25 +128,64 @@ impl Primes {
     /// let p = Primes::new(1000);
     /// ```
     pub fn new(bound: usize) -> Self {
+        let block = 500000;
         let mut primes = vec![];
+        let mut seed_primes = vec![];
 
-        if bound >= 2 {
-            let mut sieve = vec![true; bound - 1];
+        if bound > 1 {
             let root = (bound as f64).sqrt() as usize;
-
-            (2..=bound).for_each(|x| {
-                if sieve[x - 2] {
-                    primes.push(x);
-                    if x <= root {
-                        (x * x..=bound)
-                            .step_by(if x == 2 { x } else { 2 * x })
-                            .for_each(|factor| {
-                                sieve[factor - 2] = false;
-                            });
+            let mut sieve = vec![true; root + 1];
+            for i in 2..=root {
+                if sieve[i] {
+                    seed_primes.push(i);
+                    for j in (i * i..=root).step_by(i) {
+                        sieve[j] = false;
                     }
                 }
-            });
+            }
+
+            let mut k = 0;
+
+            let (tx, rx) = mpsc::channel();
+            
+            while k * block <= bound {
+                let t_k = k;
+                let t_block = block;
+                let t_bound = bound;
+                let t_primes = seed_primes.clone();
+                let t_tx = mpsc::Sender::clone(&tx);
+
+                thread::spawn(move || {
+                    let mut sieve = vec![true; t_block];
+                    let start = t_k * t_block;
+                    for p in &t_primes {
+                        let start_index = (start + p - 1) / p;
+                        let start_index = if start_index > *p { start_index } else { *p } * *p - start;
+                        for j in (start_index..t_block).step_by(*p) {
+                            sieve[j] = false;
+                        }
+                    }
+
+                    if t_k == 0 {
+                        sieve[0] = false;
+                        sieve[1] = false;
+                    }
+
+                    let result = &mut sieve.iter().enumerate().filter_map(|(v, &p)| if p && v + start <= t_bound { Some(v + start) } else { None }).collect::<Vec<usize>>();
+                    t_tx.send(result.clone()).unwrap();
+                });
+
+                k += 1;
+            }
+
+            drop(tx);
+
+            for mut received in rx {
+                primes.append(&mut received);
+            }
+            primes.sort();
         }
+
         Primes { primes, bound }
     }
 
